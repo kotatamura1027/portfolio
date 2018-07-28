@@ -1,0 +1,100 @@
+pragma solidity ^0.4.18;
+contract CrowdFunding {
+    // investors
+    struct Investor {
+        address addr;    // investor's address
+        uint amount;    // invest amount
+        
+    }
+    
+    address public owner;        // owner of contract
+    uint public numInvestors;    // number of investors
+    uint public deadline;        // dealine of the crowd funding (UnixTime)
+    string public status;        // status of this campaign
+    bool public ended;            // campaign end or not
+    uint public goalAmount;        // goal amount
+    uint public totalAmount;    // total amount
+    uint public minimumAmount = 1000000; // the minimum invest amount 100000
+    mapping (uint => Investor) public investors;    // map for checking investors 
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner);
+        _;
+    }
+    
+    /// constructor
+    function CrowdFunding(uint _duration, uint _goalAmount) public {
+        owner = msg.sender;
+
+        // set the deadline
+        deadline = now + _duration;
+
+        goalAmount = _goalAmount;
+        status = "Funding";
+        ended = false;
+
+        numInvestors = 0;
+        totalAmount = 0;
+    }
+    
+    // set the minimum invest amount
+    function setMinAmount(uint _minimumAmount) public {
+        minimumAmount = _minimumAmount;
+    }
+
+    
+    /// call this function every time invested
+    function fund() payable public {
+        // end the transaction if the campaign ends
+        require(!ended);
+        
+        if(totalAmount + msg.value >= goalAmount) {
+            minimumAmount = goalAmount - totalAmount;
+        }
+        
+        // revert if the amount doesn't reach to minimum amount
+        require(minimumAmount <= msg.value);
+        
+        Investor storage inv = investors[numInvestors++];
+        inv.addr = msg.sender;
+        inv.amount = msg.value;
+        totalAmount += inv.amount;
+        
+    }
+    
+    /// check if it reaches to the goal amount
+    /// send ehter based on the success or failure of this campaign
+    function checkGoalReached() public onlyOwner {        
+        // end the transaction if the campaign ended already
+        require(!ended);
+        
+        // cannot invest before the campaign starts
+        require(now >= deadline);
+        
+        if(totalAmount >= goalAmount) {    // if it is successful
+            status = "Campaign Succeeded";
+            ended = true;
+            // send all the ether in the contract to the owner
+            if(!owner.send(address(this).balance)) {
+                revert();
+            }
+        } else {    // if it fails
+            uint i = 0;
+            status = "Campaign Failed";
+            ended = true;
+            
+            // retrun ether to all the investors
+            while(i <= numInvestors) {
+                if(!investors[i].addr.send(investors[i].amount)) {
+                    revert();
+                }
+                i++;
+            }
+        }
+    }
+    
+    /// function to destroy the contract
+    function kill() public onlyOwner {
+        selfdestruct(owner);
+    }
+}
