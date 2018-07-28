@@ -68,7 +68,7 @@ contract CrowdFunding {
         // end the transaction if the campaign ended already
         require(!ended);
         
-        // cannot invest before the campaign starts
+        // cannot invest after the dealine passes
         require(now >= deadline);
         
         if(totalAmount >= goalAmount) {    // if it is successful
