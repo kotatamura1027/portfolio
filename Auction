@@ -1,0 +1,129 @@
+pragma solidity ^0.4.18;
+contract Owned {
+    address public owner;
+    
+    ///modifiier for access
+    modifier onlyOwner(){
+        require(msg.sender == owner);
+        _;
+    }
+    
+    ///Configure Owner
+    function owned() internal{
+        owner = msg.sender;
+    }
+    
+    ///change owner
+    function changeOwner(address _newOwner) public onlyOwner {
+        owner = _newOwner;
+    }
+}
+
+contract Mortal is Owned {
+    ///destroy contract send ether to owner
+    function kill() public onlyOwner{
+        selfdestruct(owner);
+    }
+}
+
+contract MortalSample is Mortal{
+    string public someState;
+    
+    ///Fallback function
+    function() payable public{
+        
+    }
+    
+    ///constructor
+    function MortalSample() public{
+        //Call owned funciotn using Defined Owned
+        owned();
+        
+        //configure the initial value of someState
+        someState = "initial";
+    }
+}
+
+contract CircuitBreaker is MortalSample{
+    bool public stopped;
+    address public owner;
+    bytes16 public message;
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner);
+        _;
+    }
+    
+    ///modifier which checks stopped function
+    modifier isStopped(){
+        require(!stopped);
+        _;
+    }
+    
+    ///construtor
+    function CircuitBreaker() public {
+        owner = msg.sender;
+        stopped = false;
+    }
+    
+    /// change state of stopped
+    function toggleCircuit(bool _stopped) public onlyOwner {
+        stopped = _stopped;
+    }
+    
+    ///function which updates message
+    ///if stopped function is true, canno update
+    function setMessage(bytes16 _message) public isStopped{
+        message = _message;
+    }
+}
+
+contract AuctionWithdraw is CircuitBreaker{
+    address public highestBidder; // highest bidder address
+    uint public highestBid; // highest bid price
+    uint public deadline;        // dealine of the crowd funding (UnixTime)
+    string public status;        // status of this auction
+    mapping(address => uint) public usersBalance;
+    
+    ///constructor
+    function AuctionWithdraw(uint _duration) public payable {
+        highestBidder = msg.sender;
+        highestBid = 0;
+        // set the deadline
+        deadline = now + _duration;
+
+    }
+    
+    /// function for Bid
+    function bid() public payable {
+        
+        // cannot invest after the deadline
+        require(now >= deadline);
+        
+        // check if bid is more than the current bid
+        require(msg.value > highestBid);
+        
+        //update the highest bid price
+        usersBalance[highestBidder] += highestBid;
+        
+        //update state
+        highestBid = msg.value;
+        highestBidder = msg.sender;
+    }
+    
+    function withdraw() public{
+        //check if the retrun price is more than 0
+        require(usersBalance[msg.sender] > 0);
+        
+        // define returning bid
+        uint refundAmount = usersBalance[msg.sender];
+        
+        // update the return money
+        usersBalance[msg.sender] = 0;
+        
+        //execute the return
+        if(!msg.sender.send(refundAmount)) {
+            revert();
+        }
+    }
+}
